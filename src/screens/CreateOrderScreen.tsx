@@ -17,10 +17,10 @@ import {
   Navigation,
   ShoppingBag,
   CheckCircle,
-  Circle,
   Minus,
   Plus,
 } from 'lucide-react-native';
+import FolderTabs, { TabKey } from '../components/FolderTabs';
 
 // ─── Brand ────────────────────────────────────────────────────────────────────
 
@@ -29,7 +29,6 @@ const BRAND          = '#49C593';
 
 // ─── Types & constants ────────────────────────────────────────────────────────
 
-type Tab       = 'City-wide' | 'Intercity';
 type TruckSize = 'S' | 'M' | 'L' | 'XL';
 type PickupType = 'now' | 'scheduled';
 
@@ -60,7 +59,7 @@ type EditField = 'from' | 'to' | 'weight' | null;
 export default function CreateOrderScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
 
-  const [activeTab,    setActiveTab]    = useState<Tab>('City-wide');
+  const [activeTab,    setActiveTab]    = useState<TabKey>('city');
   const [selectedSize, setSelectedSize] = useState<TruckSize>('M');
   const [loaderCount,  setLoaderCount]  = useState(0); // 0 = None, 1-8
   const [pickupType,   setPickupType]   = useState<PickupType>('now');
@@ -121,34 +120,15 @@ export default function CreateOrderScreen({ navigation }: Props) {
             <View style={{ width: 22 }} />
           </View>
 
-          {/* Folder tabs */}
-          <View style={styles.tabRow}>
-            <TouchableOpacity style={styles.tabCityWide} onPress={() => setActiveTab('City-wide')} activeOpacity={0.8}>
-              <Text style={[styles.tabText, activeTab === 'City-wide' ? styles.tabActive : styles.tabInactive]}>
-                City-wide
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.tabIntercity, activeTab === 'Intercity' && styles.tabIntercitySelected]}
-              onPress={() => setActiveTab('Intercity')}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.tabText, activeTab === 'Intercity' ? styles.tabActive : styles.tabInactive]}>
-                Intercity
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Truck image card */}
-          <View style={styles.truckCard}>
+          {/* Animated folder tabs + truck card */}
+          <FolderTabs activeTab={activeTab} onTabChange={setActiveTab}>
             <Image
               source={TRUCK_IMAGES[selectedSize]}
               style={styles.truckImage}
               resizeMode="contain"
             />
             <Text style={styles.truckCaption}>up to {WEIGHT_MAP[selectedSize]}</Text>
-          </View>
+          </FolderTabs>
 
           {/* Segmented controls */}
           <View style={styles.controlsWrap}>
@@ -393,26 +373,7 @@ const styles = StyleSheet.create({
   logoBoxText: { color: BRAND, fontWeight: '900', fontSize: 15 },
   logoText:    { color: '#FFFFFF', fontWeight: '900', fontSize: 15, letterSpacing: 2 },
 
-  // Tabs
-  tabRow:        { flexDirection: 'row', alignItems: 'flex-end' },
-  tabCityWide:   { paddingHorizontal: 4, paddingVertical: 8, marginRight: 8 },
-  tabIntercity: {
-    backgroundColor: '#2A2A2A', borderTopLeftRadius: 12,
-    borderTopRightRadius: 12, paddingHorizontal: 16, paddingVertical: 8,
-  },
-  tabIntercitySelected: { backgroundColor: '#1e3a2a' },
-  tabText:    { fontSize: 14, fontWeight: '600' },
-  tabActive:  { color: '#FFFFFF' },
-  tabInactive:{ color: '#AAAAAA' },
-
-  // Truck card
-  truckCard: {
-    backgroundColor: '#2A2A2A',
-    borderTopLeftRadius: 0, borderTopRightRadius: 16,
-    borderBottomLeftRadius: 16, borderBottomRightRadius: 16,
-    height: 220, alignItems: 'center', justifyContent: 'center',
-    marginBottom: 20,
-  },
+  // Truck image (inside FolderTabs card)
   truckImage:   { width: '75%', height: 160 },
   truckCaption: { position: 'absolute', bottom: 14, color: '#AAAAAA', fontSize: 13 },
 

@@ -1,27 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
+  Pressable,
   ScrollView,
   Image,
   StatusBar,
   Dimensions,
   Platform,
+  Animated,
 } from 'react-native';
 import MapView, { PROVIDER_GOOGLE } from 'react-native-maps';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Menu, Plus, ChevronDown } from 'lucide-react-native';
+import { Menu, Plus, ChevronDown, ChevronRight } from 'lucide-react-native';
 import MenuOverlay from '../components/MenuOverlay';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const HEADER_HEIGHT = SCREEN_HEIGHT * 0.38;
+const DROPDOWN_HEIGHT = 165;
 
-const BRAND_GRADIENT = ['#49C593', '#235F47'] as const;
+const BRAND_GRADIENT = ['#235F47', '#49C593'] as const;
 const GRADIENT_START = { x: 0, y: 0 };
-const GRADIENT_END   = { x: 1, y: 1 };
+const GRADIENT_END   = { x: 0, y: 1 };
 
 interface Props {
   navigation?: any;
@@ -36,13 +39,17 @@ interface Route {
   fromDate: string;
   toDate: string;
   progress: number;
+  truckSize: string;
+  weight: string;
+  price: string;
+  status: string;
 }
 
 const ROUTES: Route[] = [
-  { id: '1', fromCity: 'Luanda',   toCity: 'Benguela',  fromDate: 'Jun 11', toDate: 'Jun 12', progress: 0.95 },
-  { id: '2', fromCity: 'Benguela', toCity: 'Luanda',    fromDate: 'Jun 10', toDate: 'Jun 11', progress: 0.80 },
-  { id: '3', fromCity: 'Angola',   toCity: 'Namibia',   fromDate: 'Jun 5',  toDate: 'Jun 13', progress: 0.55 },
-  { id: '4', fromCity: 'Luanda',   toCity: 'Cabu Ledo', fromDate: 'Jun 11', toDate: 'Jun 11', progress: 0.90 },
+  { id: '1', fromCity: 'Luanda',   toCity: 'Benguela',  fromDate: 'Jun 11', toDate: 'Jun 12', progress: 0.95, truckSize: 'L - Rigid Truck', weight: '6,500 kg', price: 'Kz 9.750 mil',  status: 'In Transit - Driver Assigned' },
+  { id: '2', fromCity: 'Benguela', toCity: 'Luanda',    fromDate: 'Jun 10', toDate: 'Jun 11', progress: 0.80, truckSize: 'M - Box Truck',   weight: '2,200 kg', price: 'Kz 5.250 mil',  status: 'In Transit - On Route' },
+  { id: '3', fromCity: 'Angola',   toCity: 'Namibia',   fromDate: 'Jun 5',  toDate: 'Jun 13', progress: 0.55, truckSize: 'XL - Semi-Trailer', weight: '18,000 kg', price: 'Kz 18.000 mil', status: 'In Transit - Customs Clearance' },
+  { id: '4', fromCity: 'Luanda',   toCity: 'Cabu Ledo', fromDate: 'Jun 11', toDate: 'Jun 11', progress: 0.90, truckSize: 'S - Pickup',       weight: '800 kg',   price: 'Kz 2.250 mil',  status: 'Delivered' },
 ];
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
@@ -50,6 +57,7 @@ const ROUTES: Route[] = [
 export default function MapHomeScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [hasActiveOrder, setHasActiveOrder] = useState(false);
 
   return (
     <View style={styles.root}>
@@ -87,14 +95,13 @@ export default function MapHomeScreen({ navigation }: Props) {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* ── Gradient map section (continues the navbar gradient) ── */}
-        <LinearGradient
-          colors={BRAND_GRADIENT}
-          start={GRADIENT_START}
-          end={GRADIENT_END}
-          style={styles.mapSection}
-        >
-          <View style={styles.mapWrapper}>
+        {/* ── Solid map section (same colour as navbar bottom) ── */}
+        <View style={styles.mapSection}>
+          <TouchableOpacity
+            style={styles.mapWrapper}
+            activeOpacity={0.95}
+            onPress={() => navigation?.navigate('LiveTracking')}
+          >
             <MapView
               style={StyleSheet.absoluteFillObject}
               provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
@@ -105,18 +112,30 @@ export default function MapHomeScreen({ navigation }: Props) {
                 longitudeDelta: 0.08,
               }}
               customMapStyle={lightMapStyle}
+              scrollEnabled={false}
+              zoomEnabled={false}
+              pitchEnabled={false}
+              rotateEnabled={false}
             />
 
-            {/* Bottom-left overlay */}
-            <View style={styles.mapOverlay} pointerEvents="none">
-              <Text style={styles.mapOverlayTitle}>Location Tracking</Text>
-              <View style={styles.mapOverlayRow}>
-                <View style={styles.statusDot} />
-                <Text style={styles.mapOverlaySubtitle}>No active orders now</Text>
+            {/* Status pill */}
+            <View style={styles.statusPill} pointerEvents="none">
+              <View style={[
+                styles.statusIndicator,
+                { backgroundColor: hasActiveOrder ? '#4CAF50' : '#FFC107' },
+              ]} />
+              <View style={styles.statusTextBlock}>
+                <Text style={styles.statusTitle}>
+                  {hasActiveOrder ? 'Tracking Order...' : 'Location Tracking'}
+                </Text>
+                <Text style={styles.statusSubtitle}>
+                  {hasActiveOrder ? 'Truck is 5 mins away' : 'No active orders now'}
+                </Text>
               </View>
+              <ChevronRight size={16} color="#888" />
             </View>
-          </View>
-        </LinearGradient>
+          </TouchableOpacity>
+        </View>
 
         {/* ── Create New Shipping ── */}
         <TouchableOpacity
@@ -131,7 +150,11 @@ export default function MapHomeScreen({ navigation }: Props) {
         </TouchableOpacity>
 
         {/* ── Promo banner ── */}
-        <View style={styles.banner}>
+        <TouchableOpacity
+          style={styles.banner}
+          activeOpacity={0.85}
+          onPress={() => navigation?.navigate('DiscountedRoutes')}
+        >
           <View style={styles.bannerTab}>
             <Text style={styles.bannerTabText}>Save 15%</Text>
           </View>
@@ -143,12 +166,12 @@ export default function MapHomeScreen({ navigation }: Props) {
             style={styles.bannerTruck}
             resizeMode="contain"
           />
-        </View>
+        </TouchableOpacity>
 
         {/* ── Recent Shipping ── */}
         <View style={styles.recentHeader}>
           <Text style={styles.recentTitle}>Recent Shipping</Text>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation?.navigate('ShippingHistory')}>
             <Text style={styles.viewAll}>View All</Text>
           </TouchableOpacity>
         </View>
@@ -164,6 +187,7 @@ export default function MapHomeScreen({ navigation }: Props) {
       <MenuOverlay
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
+        navigation={navigation}
       />
     </View>
   );
@@ -177,11 +201,30 @@ interface RouteCardProps {
   fromDate: string;
   toDate: string;
   progress: number;
+  truckSize: string;
+  weight: string;
+  price: string;
+  status: string;
 }
 
-function RouteCard({ fromCity, toCity, fromDate, toDate, progress }: RouteCardProps) {
+function RouteCard({ fromCity, toCity, fromDate, toDate, progress, truckSize, weight, price, status }: RouteCardProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const anim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(anim, {
+      toValue: isExpanded ? 1 : 0,
+      duration: 280,
+      useNativeDriver: false,
+    }).start();
+  }, [isExpanded]);
+
+  const dropdownHeight = anim.interpolate({ inputRange: [0, 1], outputRange: [0, DROPDOWN_HEIGHT] });
+  const dropdownOpacity = anim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 0, 1] });
+  const chevronRotation = anim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
+
   return (
-    <View style={cardStyles.card}>
+    <Pressable style={cardStyles.card} onPress={() => setIsExpanded(!isExpanded)}>
       <View style={cardStyles.cityRow}>
         <Text style={cardStyles.city}>{fromCity}</Text>
         <Text style={cardStyles.city}>{toCity}</Text>
@@ -193,10 +236,39 @@ function RouteCard({ fromCity, toCity, fromDate, toDate, progress }: RouteCardPr
         <Text style={cardStyles.date}>{fromDate}</Text>
         <View style={cardStyles.dateRight}>
           <Text style={cardStyles.date}>{toDate}</Text>
-          <ChevronDown size={14} color="#666" />
+          <Animated.View style={{ transform: [{ rotate: chevronRotation }] }}>
+            <ChevronDown size={14} color="#666" />
+          </Animated.View>
         </View>
       </View>
-    </View>
+
+      {/* ── Expandable dropdown ── */}
+      <Animated.View style={[cardStyles.dropdown, { height: dropdownHeight, opacity: dropdownOpacity }]}>
+        <View style={cardStyles.dropdownInner}>
+          <View style={cardStyles.detailGrid}>
+            <View style={cardStyles.detailCell}>
+              <Text style={cardStyles.detailLabel}>Truck Size</Text>
+              <Text style={cardStyles.detailValue}>{truckSize}</Text>
+            </View>
+            <View style={cardStyles.detailCell}>
+              <Text style={cardStyles.detailLabel}>Cargo Weight</Text>
+              <Text style={cardStyles.detailValue}>{weight}</Text>
+            </View>
+            <View style={cardStyles.detailCell}>
+              <Text style={cardStyles.detailLabel}>Price</Text>
+              <Text style={cardStyles.detailValue}>{price}</Text>
+            </View>
+            <View style={cardStyles.detailCell}>
+              <Text style={cardStyles.detailLabel}>Status</Text>
+              <Text style={cardStyles.detailValue} numberOfLines={1}>{status}</Text>
+            </View>
+          </View>
+          <TouchableOpacity style={cardStyles.trackBtn} activeOpacity={0.7}>
+            <Text style={cardStyles.trackBtnText}>Track Shipment</Text>
+          </TouchableOpacity>
+        </View>
+      </Animated.View>
+    </Pressable>
   );
 }
 
@@ -225,13 +297,14 @@ const styles = StyleSheet.create({
   logoBoxText: { color: '#49C593', fontWeight: '900', fontSize: 15 },
   logoText:    { color: '#FFFFFF', fontWeight: '900', fontSize: 15, letterSpacing: 2 },
 
-  // Map section (scrollable, continues gradient from navbar)
+  // Map section
   mapSection: {
     height: HEADER_HEIGHT,
     paddingHorizontal: 16,
     paddingBottom: 20,
     borderBottomLeftRadius: 40,
     borderBottomRightRadius: 40,
+    backgroundColor: '#49C593',
   },
   mapWrapper: {
     flex: 1,
@@ -243,21 +316,22 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 8,
   },
-  mapOverlay: { position: 'absolute', bottom: 14, left: 14 },
-  mapOverlayTitle: {
-    color: '#FFFFFF', fontSize: 15, fontWeight: '700',
-    textShadowColor: 'rgba(0,0,0,0.6)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
+  statusPill: {
+    position: 'absolute',
+    bottom: 24,
+    left: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(20, 20, 20, 0.85)',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 24,
   },
-  mapOverlayRow:     { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
-  statusDot:         { width: 7, height: 7, borderRadius: 4, backgroundColor: '#FFD700' },
-  mapOverlaySubtitle: {
-    color: '#FFFFFF', fontSize: 12,
-    textShadowColor: 'rgba(0,0,0,0.6)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
-  },
+  statusIndicator: { width: 10, height: 10, borderRadius: 5, marginRight: 10 },
+  statusTextBlock: { flex: 1 },
+  statusTitle:    { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  statusSubtitle: { color: '#A0A0A0', fontSize: 12, marginTop: 1 },
 
   // Create New Shipping
   createBtn: {
@@ -316,13 +390,13 @@ const styles = StyleSheet.create({
   recentTitle: { color: '#FFFFFF', fontSize: 17, fontWeight: '700' },
   viewAll:     { color: '#49C593', fontSize: 14, fontWeight: '600' },
   routeList:   { paddingHorizontal: 16, gap: 2 },
-
 });
 
 const cardStyles = StyleSheet.create({
   card: {
     backgroundColor: '#1A1A1A', borderRadius: 14,
     paddingHorizontal: 16, paddingVertical: 14, marginBottom: 8,
+    overflow: 'hidden',
   },
   cityRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
   city:    { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
@@ -331,6 +405,34 @@ const cardStyles = StyleSheet.create({
   dateRow:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   dateRight:{ flexDirection: 'row', alignItems: 'center', gap: 4 },
   date:     { color: '#666', fontSize: 12 },
+
+  // Dropdown
+  dropdown: { overflow: 'hidden' },
+  dropdownInner: {
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#2A2A2A',
+    marginTop: 12,
+  },
+  detailGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 12,
+  },
+  detailCell: { width: '47%' },
+  detailLabel: { color: '#666', fontSize: 11, marginBottom: 2 },
+  detailValue: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
+
+  // Track button
+  trackBtn: {
+    borderWidth: 1,
+    borderColor: '#49C593',
+    borderRadius: 10,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  trackBtnText: { color: '#49C593', fontSize: 13, fontWeight: '700' },
 });
 
 // ─── Light map style ──────────────────────────────────────────────────────────

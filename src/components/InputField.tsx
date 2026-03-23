@@ -34,7 +34,7 @@ export default function InputField({
 }: InputFieldProps) {
   const content = (
     <View style={[styles.container, light && styles.containerLight, style]}>
-      <Icon size={18} color={light ? '#4CAF50' : '#4CAF50'} strokeWidth={2} />
+      <Icon size={18} color={light ? '#49C593' : '#49C593'} strokeWidth={2} />
       <TextInput
         style={[styles.input, light && styles.inputLight]}
         placeholder={placeholder}

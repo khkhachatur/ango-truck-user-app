@@ -7,8 +7,7 @@ import {
   SafeAreaView,
   StatusBar,
 } from 'react-native';
-import { MapPin, Navigation } from 'lucide-react-native';
-import { Truck } from 'lucide-react-native';
+import { MapPin, Navigation, Truck } from 'lucide-react-native';
 
 import { TRUCK_SIZES, TruckSize } from '../../constants/trucks';
 import { fromPrice } from '../utils/currency';
@@ -45,7 +44,7 @@ export default function OrderDetailsScreen({ navigation }: Props) {
         {/* Truck Illustration */}
         <View style={styles.truckContainer}>
           <View style={styles.truckGlow} />
-          <Truck size={120} color="#4CAF50" strokeWidth={1} />
+          <Truck size={120} color="#49C593" strokeWidth={1} />
           <Text style={styles.truckName}>{truck.label}</Text>
           <Text style={styles.truckDesc}>{truck.description}</Text>
         </View>
@@ -156,7 +155,7 @@ const styles = StyleSheet.create({
     width: 160,
     height: 160,
     borderRadius: 80,
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#49C593',
     opacity: 0.06,
   },
   truckName: {
@@ -197,7 +196,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     marginBottom: 28,
     borderLeftWidth: 3,
-    borderLeftColor: '#4CAF50',
+    borderLeftColor: '#49C593',
   },
   weightText: {
     color: '#888',
@@ -216,7 +215,7 @@ const styles = StyleSheet.create({
   routeLine: {
     width: 2,
     height: 12,
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#49C593',
     marginLeft: 22,
     opacity: 0.4,
   },
@@ -239,7 +238,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   priceValue: {
-    color: '#4CAF50',
+    color: '#49C593',
     fontSize: 22,
     fontWeight: '800',
   },
@@ -252,14 +251,14 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 12,
-    backgroundColor: '#4CAF5020',
+    backgroundColor: '#49C59320',
     borderWidth: 1.5,
-    borderColor: '#4CAF50',
+    borderColor: '#49C593',
     alignItems: 'center',
     justifyContent: 'center',
   },
   priceBadgeText: {
-    color: '#4CAF50',
+    color: '#49C593',
     fontSize: 16,
     fontWeight: '800',
   },

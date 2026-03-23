@@ -43,7 +43,7 @@ export default function GreenButton({
 
 const styles = StyleSheet.create({
   button: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#49C593',
     borderRadius: 14,
     paddingVertical: 16,
     alignItems: 'center',

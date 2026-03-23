@@ -19,7 +19,7 @@ export default function TruckCard({ size, config, selected, onSelect }: TruckCar
     >
       <Truck
         size={20}
-        color={selected ? '#121212' : '#4CAF50'}
+        color={selected ? '#121212' : '#49C593'}
         strokeWidth={1.8}
       />
       <Text style={[styles.sizeLabel, selected && styles.textSelected]}>{size}</Text>
@@ -43,8 +43,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   cardSelected: {
-    backgroundColor: '#4CAF50',
-    borderColor: '#4CAF50',
+    backgroundColor: '#49C593',
+    borderColor: '#49C593',
   },
   sizeLabel: {
     color: '#FFFFFF',
@@ -61,6 +61,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   weightSelected: {
-    color: '#1a3a1a',
+    color: '#0A2A1A',
   },
 });

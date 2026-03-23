@@ -34,11 +34,12 @@ const SPRING_CFG = { damping: 20, stiffness: 90, useNativeDriver: true } as cons
 interface MenuOverlayProps {
   isOpen: boolean;
   onClose: () => void;
+  navigation?: any;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function MenuOverlay({ isOpen, onClose }: MenuOverlayProps) {
+export default function MenuOverlay({ isOpen, onClose, navigation }: MenuOverlayProps) {
   const insets = useSafeAreaInsets();
   const translateX = useRef(new Animated.Value(-SCREEN_WIDTH)).current;
 
@@ -125,22 +126,22 @@ export default function MenuOverlay({ isOpen, onClose }: MenuOverlayProps) {
 
           {/* Group 1 — Account */}
           <MenuGroup>
-            <MenuItem icon={User}       title="My company"        />
-            <MenuItem icon={CreditCard} title="Payment methods" isLast />
+            <MenuItem icon={User}       title="My company"       onPress={() => navigation?.navigate('MyCompany')} />
+            <MenuItem icon={CreditCard} title="Payment methods"  onPress={() => navigation?.navigate('PaymentMethods')} isLast />
           </MenuGroup>
 
           {/* Group 2 — Activity */}
           <MenuGroup>
-            <MenuItem icon={Heart}         title="Favorites"  />
-            <MenuItem icon={ClipboardList} title="History"    />
-            <MenuItem icon={MapPin}        title="Addresses"  />
-            <MenuItem icon={MessageCircle} title="Support" isLast />
+            <MenuItem icon={Heart}         title="Favorites"  onPress={() => navigation?.navigate('Favorites')} />
+            <MenuItem icon={ClipboardList} title="History"    onPress={() => navigation?.navigate('History')} />
+            <MenuItem icon={MapPin}        title="Addresses"  onPress={() => navigation?.navigate('Addresses')} />
+            <MenuItem icon={MessageCircle} title="Support"    onPress={() => navigation?.navigate('Support')} isLast />
           </MenuGroup>
 
           {/* Group 3 — App */}
           <MenuGroup>
-            <MenuItem icon={Settings} title="Settings"    />
-            <MenuItem icon={Info}     title="Information" isLast />
+            <MenuItem icon={Settings} title="Settings"    onPress={() => navigation?.navigate('Settings')} />
+            <MenuItem icon={Info}     title="Information" onPress={() => navigation?.navigate('Information')} isLast />
           </MenuGroup>
         </ScrollView>
       </Animated.View>
@@ -160,13 +161,15 @@ interface MenuItemProps {
   icon: LucideIcon;
   title: string;
   isLast?: boolean;
+  onPress?: () => void;
 }
 
-function MenuItem({ icon: Icon, title, isLast = false }: MenuItemProps) {
+function MenuItem({ icon: Icon, title, isLast = false, onPress }: MenuItemProps) {
   return (
     <TouchableOpacity
       style={[itemStyles.row, !isLast && itemStyles.border]}
       activeOpacity={0.7}
+      onPress={onPress}
     >
       <View style={itemStyles.left}>
         <View style={itemStyles.iconWrap}>
