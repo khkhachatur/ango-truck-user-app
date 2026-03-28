@@ -19,30 +19,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   async function fetchProfile(userId: string) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('users')
       .select('*')
       .eq('id', userId)
       .single();
+    if (error) {
+      console.warn('[useAuth] fetchProfile failed:', error.message);
+      return;
+    }
     if (data) setUser(data as User);
   }
 
   useEffect(() => {
+    let initialLoad = true;
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session?.user) {
-        fetchProfile(session.user.id).finally(() => setLoading(false));
+        fetchProfile(session.user.id).finally(() => {
+          if (initialLoad) { setLoading(false); initialLoad = false; }
+        });
       } else {
-        setLoading(false);
+        if (initialLoad) { setLoading(false); initialLoad = false; }
       }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (session?.user) {
-        fetchProfile(session.user.id);
+        fetchProfile(session.user.id).finally(() => {
+          if (initialLoad) { setLoading(false); initialLoad = false; }
+        });
       } else {
         setUser(null);
+        if (initialLoad) { setLoading(false); initialLoad = false; }
       }
     });
 

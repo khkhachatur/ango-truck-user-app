@@ -74,7 +74,7 @@ export default function ShippingHistoryScreen({ navigation }: Props) {
             setLoads((prev) =>
               prev.map((l) => (l.id === (payload.new as Load).id ? (payload.new as Load) : l)),
             );
-          } else if (payload.eventType === 'DELETE') {
+          } else if (payload.eventType === 'DELETE' && payload.old?.id) {
             setLoads((prev) => prev.filter((l) => l.id !== payload.old.id));
           }
         },

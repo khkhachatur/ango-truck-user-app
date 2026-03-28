@@ -66,9 +66,10 @@ export default function OrderConfirmedScreen({ navigation, route }: Props) {
       {/* Buttons */}
       <View style={styles.buttons}>
         <TouchableOpacity
-          style={styles.primaryBtn}
+          style={[styles.primaryBtn, !load && { opacity: 0.5 }]}
           activeOpacity={0.85}
-          onPress={() => load && navigation?.navigate('Tracking', { load })}
+          onPress={() => { if (load) navigation?.navigate('Tracking', { load }); }}
+          disabled={!load}
         >
           <Text style={styles.primaryBtnText}>Track Shipment</Text>
         </TouchableOpacity>

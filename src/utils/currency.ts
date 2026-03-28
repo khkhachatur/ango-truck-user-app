@@ -17,8 +17,8 @@ export function formatKwanza(amount: number): string {
  */
 export function formatKwanzaMil(amountKz: number): string {
   const inMil = amountKz / 1000;
-  // toFixed(3) then replace decimal dot with dot separator
-  const formatted = inMil.toFixed(3).replace('.', '.');
+  // toFixed(3) gives e.g. "2.250", replace decimal dot with Angolan thousands dot
+  const formatted = inMil.toFixed(3).replace('.', ',');
   return `Kz ${formatted} mil`;
 }
 

@@ -36,7 +36,7 @@ export default function ChatScreen({ navigation, route }: Props) {
 
   // ── Fetch history ────────────────────────────────────────────────────────────
   const fetchMessages = useCallback(async () => {
-    if (!user) return;
+    if (!user || !receiverId) return;
 
     let query = supabase
       .from('messages')
@@ -59,7 +59,7 @@ export default function ChatScreen({ navigation, route }: Props) {
 
   // ── Real-time subscription ────────────────────────────────────────────────────
   useEffect(() => {
-    if (!user) return;
+    if (!user || !receiverId) return;
 
     const channel = supabase
       .channel(`chat:${user.id}:${receiverId}`)

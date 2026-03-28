@@ -36,6 +36,8 @@ const BRAND          = '#49C593';
 
 // ─── Types & constants ────────────────────────────────────────────────────────
 
+type TruckSize = 'S' | 'M' | 'L' | 'XL';
+
 // ─── Price estimation ─────────────────────────────────────────────────────────
 
 const PRICE_PER_KM: Record<TruckSize, number> = { S: 150, M: 350, L: 650, XL: 1200 };
