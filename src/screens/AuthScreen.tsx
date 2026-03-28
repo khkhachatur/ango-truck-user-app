@@ -14,9 +14,10 @@ import {
   PanResponder,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Mail, Lock, User } from 'lucide-react-native';
+import { Mail, Lock, User, Phone } from 'lucide-react-native';
 import GreenButton from '../components/GreenButton';
 import InputField from '../components/InputField';
+import { useAuth } from '../hooks/useAuth';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const SHEET_HEIGHT = SCREEN_HEIGHT * 0.75;
@@ -34,10 +35,14 @@ interface Props {
 
 export default function AuthScreen({ navigation }: Props) {
   const [activeForm, setActiveForm] = useState<ActiveForm>(null);
-  const [email, setEmail]     = useState('');
-  const [password, setPassword] = useState('');
-  const [name, setName]       = useState('');
+  const [email, setEmail]         = useState('');
+  const [password, setPassword]   = useState('');
+  const [name, setName]           = useState('');
+  const [phone, setPhone]         = useState('');
+  const [error, setError]         = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const insets = useSafeAreaInsets();
+  const { signIn, signUp } = useAuth();
 
   // Sheet offset: 0 = fully open, SHEET_HEIGHT = off-screen below
   const translateY = useRef(new Animated.Value(SHEET_HEIGHT)).current;
@@ -51,12 +56,30 @@ export default function AuthScreen({ navigation }: Props) {
   }
 
   function openSheet(form: ActiveForm) {
+    setError(null);
     setActiveForm(form);
     animateOpen();
   }
 
   function closeSheet() {
-    animateClose(() => setActiveForm(null));
+    animateClose(() => { setActiveForm(null); setError(null); });
+  }
+
+  async function handleSubmit() {
+    setError(null);
+    setSubmitting(true);
+    try {
+      if (isSignUp) {
+        await signUp(email, password, name, phone);
+      } else {
+        await signIn(email, password);
+      }
+      navigation?.replace('MapHome');
+    } catch (e: any) {
+      setError(e?.message ?? 'Something went wrong. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   // ── Swipe-to-dismiss gesture ───────────────────────────────────────────────
@@ -167,6 +190,15 @@ export default function AuthScreen({ navigation }: Props) {
                   light
                 />
               )}
+              {isSignUp && (
+                <InputField
+                  placeholder="Phone Number"
+                  value={phone}
+                  onChangeText={setPhone}
+                  Icon={Phone}
+                  light
+                />
+              )}
               <InputField
                 placeholder="Email"
                 value={email}
@@ -184,9 +216,13 @@ export default function AuthScreen({ navigation }: Props) {
               />
             </View>
 
+            {error !== null && (
+              <Text style={styles.errorText}>{error}</Text>
+            )}
+
             <GreenButton
-              label={isSignUp ? 'Create Account' : 'Sign In'}
-              onPress={() => navigation?.replace('MapHome')}
+              label={submitting ? 'Please wait…' : isSignUp ? 'Create Account' : 'Sign In'}
+              onPress={handleSubmit}
             />
 
             <View style={styles.dividerRow}>
@@ -269,7 +305,8 @@ const styles = StyleSheet.create({
     textAlign: 'center', marginBottom: 28,
   },
 
-  fields: { gap: 14, marginBottom: 24 },
+  fields: { gap: 14, marginBottom: 16 },
+  errorText: { color: '#D32F2F', fontSize: 13, textAlign: 'center', marginBottom: 12 },
 
   dividerRow: {
     flexDirection: 'row', alignItems: 'center',

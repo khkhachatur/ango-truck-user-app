@@ -1,55 +1,120 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Pressable,
+  Alert,
+  RefreshControl,
   ScrollView,
   StatusBar,
-  Animated,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowLeft, ChevronDown } from 'lucide-react-native';
-
-const DROPDOWN_HEIGHT = 165;
+import { ArrowLeft } from 'lucide-react-native';
+import { supabase, Load } from '../lib/supabase';
+import { useAuth } from '../hooks/useAuth';
+import { formatKwanza } from '../utils/currency';
 
 interface Props {
   navigation?: any;
 }
 
-interface Route {
-  id: string;
-  fromCity: string;
-  toCity: string;
-  fromDate: string;
-  toDate: string;
-  progress: number;
-  truckSize: string;
-  weight: string;
-  price: string;
-  status: string;
-}
+// ─── Status badge config ──────────────────────────────────────────────────────
 
-const ALL_ROUTES: Route[] = [
-  { id: '1',  fromCity: 'Luanda',   toCity: 'Benguela',   fromDate: 'Jun 11', toDate: 'Jun 12', progress: 0.95, truckSize: 'L - Rigid Truck',    weight: '6,500 kg',  price: 'Kz 9.750 mil',  status: 'In Transit - Driver Assigned' },
-  { id: '2',  fromCity: 'Benguela', toCity: 'Luanda',     fromDate: 'Jun 10', toDate: 'Jun 11', progress: 0.80, truckSize: 'M - Box Truck',       weight: '2,200 kg',  price: 'Kz 5.250 mil',  status: 'In Transit - On Route' },
-  { id: '3',  fromCity: 'Angola',   toCity: 'Namibia',    fromDate: 'Jun 5',  toDate: 'Jun 13', progress: 0.55, truckSize: 'XL - Semi-Trailer',   weight: '18,000 kg', price: 'Kz 18.000 mil', status: 'In Transit - Customs Clearance' },
-  { id: '4',  fromCity: 'Luanda',   toCity: 'Cabu Ledo',  fromDate: 'Jun 11', toDate: 'Jun 11', progress: 0.90, truckSize: 'S - Pickup',          weight: '800 kg',    price: 'Kz 2.250 mil',  status: 'Delivered' },
-  { id: '5',  fromCity: 'Malanje',  toCity: 'Luanda',     fromDate: 'May 28', toDate: 'May 30', progress: 1.00, truckSize: 'M - Box Truck',       weight: '3,100 kg',  price: 'Kz 6.300 mil',  status: 'Delivered' },
-  { id: '6',  fromCity: 'Luanda',   toCity: 'Huambo',     fromDate: 'May 20', toDate: 'May 22', progress: 1.00, truckSize: 'L - Rigid Truck',     weight: '7,800 kg',  price: 'Kz 11.700 mil', status: 'Delivered' },
-  { id: '7',  fromCity: 'Huíla',    toCity: 'Luanda',     fromDate: 'May 10', toDate: 'May 12', progress: 1.00, truckSize: 'S - Pickup',          weight: '950 kg',    price: 'Kz 2.850 mil',  status: 'Delivered' },
-  { id: '8',  fromCity: 'Luanda',   toCity: 'Cabinda',    fromDate: 'Apr 30', toDate: 'May 2',  progress: 1.00, truckSize: 'XL - Semi-Trailer',   weight: '22,000 kg', price: 'Kz 24.000 mil', status: 'Delivered' },
-];
+const STATUS_CONFIG: Record<Load['status'], { label: string; bg: string; text: string }> = {
+  open:       { label: 'Open',       bg: '#1A3A5C', text: '#4DA3FF' },
+  assigned:   { label: 'Assigned',   bg: '#3D2E00', text: '#FFB300' },
+  in_transit: { label: 'In Transit', bg: '#0D3320', text: '#49C593' },
+  delivered:  { label: 'Delivered',  bg: '#2A2A2A', text: '#888888' },
+  cancelled:  { label: 'Cancelled',  bg: '#3D0A0A', text: '#EF5350' },
+};
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function ShippingHistoryScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+  const [loads, setLoads] = useState<Load[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+  const fetchLoads = useCallback(async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from('loads')
+      .select('*')
+      .eq('shipper_id', user.id)
+      .order('created_at', { ascending: false });
+    if (data) setLoads(data as Load[]);
+  }, [user]);
+
+  // Initial fetch
+  useEffect(() => {
+    fetchLoads();
+  }, [fetchLoads]);
+
+  // Real-time subscription
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel('loads:shipper')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'loads',
+          filter: `shipper_id=eq.${user.id}`,
+        },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            setLoads((prev) => [payload.new as Load, ...prev]);
+          } else if (payload.eventType === 'UPDATE') {
+            setLoads((prev) =>
+              prev.map((l) => (l.id === (payload.new as Load).id ? (payload.new as Load) : l)),
+            );
+          } else if (payload.eventType === 'DELETE') {
+            setLoads((prev) => prev.filter((l) => l.id !== payload.old.id));
+          }
+        },
+      )
+      .subscribe();
+
+    channelRef.current = channel;
+    return () => { supabase.removeChannel(channel); };
+  }, [user]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchLoads();
+    setRefreshing(false);
+  }, [fetchLoads]);
+
+  async function cancelLoad(load: Load) {
+    Alert.alert(
+      'Cancel Shipment',
+      'Are you sure you want to cancel this shipment?',
+      [
+        { text: 'Keep', style: 'cancel' },
+        {
+          text: 'Cancel Shipment',
+          style: 'destructive',
+          onPress: async () => {
+            await supabase
+              .from('loads')
+              .update({ status: 'cancelled', cancelled_at: new Date().toISOString() })
+              .eq('id', load.id);
+          },
+        },
+      ],
+    );
+  }
 
   return (
     <View style={styles.root}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      {/* ── Header ── */}
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity
           onPress={() => navigation?.goBack()}
@@ -57,93 +122,100 @@ export default function ShippingHistoryScreen({ navigation }: Props) {
         >
           <ArrowLeft size={24} color="#FFFFFF" strokeWidth={2} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Shipping History</Text>
+        <Text style={styles.headerTitle}>My Shipments</Text>
         <View style={{ width: 24 }} />
       </View>
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 24 }]}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: insets.bottom + 24 },
+        ]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#49C593"
+          />
+        }
       >
-        {ALL_ROUTES.map((r) => (
-          <RouteCard key={r.id} {...r} />
+        {loads.length === 0 && (
+          <Text style={styles.emptyText}>No shipments yet.</Text>
+        )}
+        {loads.map((load) => (
+          <ShipmentCard
+            key={load.id}
+            load={load}
+            onPress={() => navigation?.navigate('Tracking', { load })}
+            onCancel={() => cancelLoad(load)}
+          />
         ))}
       </ScrollView>
     </View>
   );
 }
 
-// ─── RouteCard ────────────────────────────────────────────────────────────────
+// ─── ShipmentCard ─────────────────────────────────────────────────────────────
 
-function RouteCard({ fromCity, toCity, fromDate, toDate, progress, truckSize, weight, price, status }: Route) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const anim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.timing(anim, {
-      toValue: isExpanded ? 1 : 0,
-      duration: 280,
-      useNativeDriver: false,
-    }).start();
-  }, [isExpanded]);
-
-  const dropdownHeight  = anim.interpolate({ inputRange: [0, 1], outputRange: [0, DROPDOWN_HEIGHT] });
-  const dropdownOpacity = anim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 0, 1] });
-  const chevronRotation = anim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] });
+function ShipmentCard({
+  load,
+  onPress,
+  onCancel,
+}: {
+  load: Load;
+  onPress: () => void;
+  onCancel: () => void;
+}) {
+  const cfg = STATUS_CONFIG[load.status] ?? STATUS_CONFIG.open;
+  const createdDate = new Date(load.created_at).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+  const price = load.offered_price_aoa ?? load.estimated_price_aoa ?? 0;
 
   return (
-    <Pressable style={cardStyles.card} onPress={() => setIsExpanded(!isExpanded)}>
-      <View style={cardStyles.cityRow}>
-        <Text style={cardStyles.city}>{fromCity}</Text>
-        <Text style={cardStyles.city}>{toCity}</Text>
-      </View>
-      <View style={cardStyles.progressTrack}>
-        <View style={[cardStyles.progressFill, { width: `${progress * 100}%` }]} />
-      </View>
-      <View style={cardStyles.dateRow}>
-        <Text style={cardStyles.date}>{fromDate}</Text>
-        <View style={cardStyles.dateRight}>
-          <Text style={cardStyles.date}>{toDate}</Text>
-          <Animated.View style={{ transform: [{ rotate: chevronRotation }] }}>
-            <ChevronDown size={14} color="#666" />
-          </Animated.View>
-        </View>
+    <TouchableOpacity style={card.wrap} activeOpacity={0.75} onPress={onPress}>
+      {/* Route row */}
+      <View style={card.routeRow}>
+        <Text style={card.city} numberOfLines={1}>{load.pickup_location}</Text>
+        <Text style={card.arrow}>→</Text>
+        <Text style={card.city} numberOfLines={1}>{load.dropoff_location}</Text>
       </View>
 
-      <Animated.View style={[cardStyles.dropdown, { height: dropdownHeight, opacity: dropdownOpacity }]}>
-        <View style={cardStyles.dropdownInner}>
-          <View style={cardStyles.detailGrid}>
-            <View style={cardStyles.detailCell}>
-              <Text style={cardStyles.detailLabel}>Truck Size</Text>
-              <Text style={cardStyles.detailValue}>{truckSize}</Text>
-            </View>
-            <View style={cardStyles.detailCell}>
-              <Text style={cardStyles.detailLabel}>Cargo Weight</Text>
-              <Text style={cardStyles.detailValue}>{weight}</Text>
-            </View>
-            <View style={cardStyles.detailCell}>
-              <Text style={cardStyles.detailLabel}>Price</Text>
-              <Text style={cardStyles.detailValue}>{price}</Text>
-            </View>
-            <View style={cardStyles.detailCell}>
-              <Text style={cardStyles.detailLabel}>Status</Text>
-              <Text style={cardStyles.detailValue} numberOfLines={1}>{status}</Text>
-            </View>
-          </View>
-          <TouchableOpacity style={cardStyles.trackBtn} activeOpacity={0.7}>
-            <Text style={cardStyles.trackBtnText}>Track Shipment</Text>
-          </TouchableOpacity>
-        </View>
-      </Animated.View>
-    </Pressable>
+      {/* Status badge */}
+      <View style={[card.badge, { backgroundColor: cfg.bg }]}>
+        <Text style={[card.badgeText, { color: cfg.text }]}>{cfg.label}</Text>
+      </View>
+
+      {/* Details */}
+      <Text style={card.cargo} numberOfLines={2}>{load.cargo_description}</Text>
+
+      <View style={card.footer}>
+        <Text style={card.price}>{formatKwanza(price)}</Text>
+        <Text style={card.date}>{createdDate}</Text>
+      </View>
+
+      {/* Cancel button — only for open loads */}
+      {load.status === 'open' && (
+        <TouchableOpacity
+          style={card.cancelBtn}
+          activeOpacity={0.7}
+          onPress={(e) => { e.stopPropagation(); onCancel(); }}
+        >
+          <Text style={card.cancelText}>Cancel Shipment</Text>
+        </TouchableOpacity>
+      )}
+    </TouchableOpacity>
   );
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  root:   { flex: 1, backgroundColor: '#121212' },
+  root:  { flex: 1, backgroundColor: '#121212' },
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 16, paddingTop: 12 },
 
@@ -156,45 +228,47 @@ const styles = StyleSheet.create({
     backgroundColor: '#121212',
   },
   headerTitle: { color: '#FFFFFF', fontSize: 17, fontWeight: '700' },
+  emptyText:   { color: '#555', textAlign: 'center', marginTop: 60, fontSize: 15 },
 });
 
-const cardStyles = StyleSheet.create({
-  card: {
-    backgroundColor: '#1A1A1A', borderRadius: 14,
-    paddingHorizontal: 16, paddingVertical: 14, marginBottom: 8,
-    overflow: 'hidden',
+const card = StyleSheet.create({
+  wrap: {
+    backgroundColor: '#1A1A1A',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 10,
   },
-  cityRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
-  city:    { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
-  progressTrack: { height: 3, backgroundColor: '#2E2E2E', borderRadius: 2, marginBottom: 8 },
-  progressFill:  { height: 3, backgroundColor: '#49C593', borderRadius: 2 },
-  dateRow:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  dateRight:{ flexDirection: 'row', alignItems: 'center', gap: 4 },
-  date:     { color: '#666', fontSize: 12 },
-
-  dropdown: { overflow: 'hidden' },
-  dropdownInner: {
-    paddingTop: 14,
-    borderTopWidth: 1,
-    borderTopColor: '#2A2A2A',
-    marginTop: 12,
-  },
-  detailGrid: {
+  routeRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 12,
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
   },
-  detailCell: { width: '47%' },
-  detailLabel: { color: '#666', fontSize: 11, marginBottom: 2 },
-  detailValue: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
+  city:  { color: '#FFFFFF', fontSize: 15, fontWeight: '700', flex: 1 },
+  arrow: { color: '#49C593', fontSize: 14, fontWeight: '700' },
 
-  trackBtn: {
+  badge: {
+    alignSelf: 'flex-start',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginBottom: 10,
+  },
+  badgeText: { fontSize: 11, fontWeight: '700' },
+
+  cargo: { color: '#AAAAAA', fontSize: 13, marginBottom: 12, lineHeight: 18 },
+
+  footer:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  price:   { color: '#49C593', fontSize: 14, fontWeight: '700' },
+  date:    { color: '#555', fontSize: 12 },
+
+  cancelBtn: {
+    marginTop: 12,
     borderWidth: 1,
-    borderColor: '#49C593',
-    borderRadius: 10,
+    borderColor: '#EF5350',
+    borderRadius: 8,
     paddingVertical: 8,
     alignItems: 'center',
   },
-  trackBtnText: { color: '#49C593', fontSize: 13, fontWeight: '700' },
+  cancelText: { color: '#EF5350', fontSize: 13, fontWeight: '600' },
 });

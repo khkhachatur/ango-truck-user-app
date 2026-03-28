@@ -10,13 +10,17 @@ import {
 import MapView, { PROVIDER_GOOGLE } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft } from 'lucide-react-native';
+import { Load } from '../lib/supabase';
+import { formatKwanza } from '../utils/currency';
 
 interface Props {
   navigation?: any;
+  route?: { params?: { load?: Load } };
 }
 
-export default function LiveTrackingScreen({ navigation }: Props) {
+export default function LiveTrackingScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
+  const load = route?.params?.load;
 
   return (
     <View style={styles.root}>
@@ -45,8 +49,23 @@ export default function LiveTrackingScreen({ navigation }: Props) {
 
       {/* Bottom info card */}
       <View style={[styles.card, { paddingBottom: insets.bottom + 16 }]}>
-        <Text style={styles.cardTitle}>Live Tracking</Text>
-        <Text style={styles.cardSub}>No active order to track right now.</Text>
+        {load ? (
+          <>
+            <Text style={styles.cardTitle} numberOfLines={1}>
+              {load.pickup_location} → {load.dropoff_location}
+            </Text>
+            <Text style={styles.cardSub} numberOfLines={2}>{load.cargo_description}</Text>
+            <View style={styles.cardRow}>
+              <Text style={styles.cardPrice}>{formatKwanza(load.offered_price_aoa ?? 0)}</Text>
+              <Text style={styles.cardStatus}>{load.status.replace('_', ' ').toUpperCase()}</Text>
+            </View>
+          </>
+        ) : (
+          <>
+            <Text style={styles.cardTitle}>Live Tracking</Text>
+            <Text style={styles.cardSub}>No active order to track right now.</Text>
+          </>
+        )}
       </View>
     </View>
   );
@@ -77,6 +96,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 20,
   },
-  cardTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '700', marginBottom: 6 },
-  cardSub:   { color: '#888', fontSize: 14 },
+  cardTitle:  { color: '#FFFFFF', fontSize: 18, fontWeight: '700', marginBottom: 6 },
+  cardSub:    { color: '#888', fontSize: 14, marginBottom: 12 },
+  cardRow:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  cardPrice:  { color: '#49C593', fontSize: 15, fontWeight: '700' },
+  cardStatus: { color: '#888', fontSize: 12, fontWeight: '600' },
 });
