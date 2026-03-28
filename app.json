@@ -1,10 +1,11 @@
 {
   "expo": {
-    "name": "shipping-app",
-    "slug": "shipping-app",
+    "name": "AngoTrack",
+    "slug": "ango-track",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
+    "scheme": "angotrack",
     "userInterfaceStyle": "dark",
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -12,20 +13,38 @@
       "backgroundColor": "#121212"
     },
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.shipping-app"
+      "supportsTablet": false,
+      "bundleIdentifier": "com.angotrack.shipper",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "AngoTrack needs your location to show nearby drivers.",
+        "NSCameraUsageDescription": "AngoTrack needs camera access for proof of delivery photos."
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#121212",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "package": "com.anonymous.shippingapp"
+      "package": "com.angotrack.shipper",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "CAMERA"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "16.0"
+          }
+        }
+      ]
+    ]
   }
 }

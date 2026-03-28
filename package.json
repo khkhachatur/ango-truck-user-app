@@ -15,6 +15,7 @@
     "@supabase/supabase-js": "^2.100.1",
     "babel-preset-expo": "~55.0.8",
     "expo": "~55.0.9",
+    "expo-build-properties": "~55.0.10",
     "expo-linear-gradient": "~55.0.9",
     "expo-status-bar": "~55.0.4",
     "lucide-react-native": "^0.577.0",
