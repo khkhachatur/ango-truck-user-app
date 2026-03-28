@@ -12,15 +12,31 @@ import {
   Platform,
   Animated,
 } from 'react-native';
-import MapView, { PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Menu, Plus, ChevronDown, ChevronRight } from 'lucide-react-native';
+import { Menu, Plus, ChevronDown, ChevronRight, Truck } from 'lucide-react-native';
 import MenuOverlay from '../components/MenuOverlay';
+import { supabase } from '../lib/supabase';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-const HEADER_HEIGHT = SCREEN_HEIGHT * 0.38;
+const HEADER_HEIGHT = 260;
 const DROPDOWN_HEIGHT = 165;
+
+interface DriverMarker {
+  driver_id: string;
+  latitude: number;
+  longitude: number;
+  heading: number | null;
+  driver: { full_name: string; status: string | null; vehicle_type: string | null } | null;
+}
+
+const ANGOLA_REGION = {
+  latitude: -11.2027,
+  longitude: 17.8739,
+  latitudeDelta: 14.0,
+  longitudeDelta: 10.0,
+};
 
 const BRAND_GRADIENT = ['#235F47', '#49C593'] as const;
 const GRADIENT_START = { x: 0, y: 0 };
@@ -58,6 +74,44 @@ export default function MapHomeScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [hasActiveOrder, setHasActiveOrder] = useState(false);
+  const [drivers, setDrivers] = useState<DriverMarker[]>([]);
+
+  // Fetch active driver locations
+  useEffect(() => {
+    async function fetchDrivers() {
+      const { data } = await supabase
+        .from('driver_locations')
+        .select('driver_id, latitude, longitude, heading, driver:users!driver_id(full_name, status, vehicle_type)');
+      if (data) setDrivers(data as unknown as DriverMarker[]);
+    }
+    fetchDrivers();
+
+    const channel = supabase
+      .channel('home-driver-locs')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'driver_locations' },
+        (payload) => {
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            setDrivers((prev) => {
+              const incoming = payload.new as DriverMarker;
+              const exists = prev.find((d) => d.driver_id === incoming.driver_id);
+              if (exists) {
+                return prev.map((d) =>
+                  d.driver_id === incoming.driver_id ? { ...d, ...incoming } : d,
+                );
+              }
+              return [...prev, incoming];
+            });
+          } else if (payload.eventType === 'DELETE') {
+            setDrivers((prev) => prev.filter((d) => d.driver_id !== payload.old.driver_id));
+          }
+        },
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, []);
 
   return (
     <View style={styles.root}>
@@ -104,19 +158,27 @@ export default function MapHomeScreen({ navigation }: Props) {
           >
             <MapView
               style={StyleSheet.absoluteFillObject}
-              provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
-              initialRegion={{
-                latitude: -8.8368,
-                longitude: 13.2343,
-                latitudeDelta: 0.08,
-                longitudeDelta: 0.08,
-              }}
+              provider={PROVIDER_GOOGLE}
+              initialRegion={ANGOLA_REGION}
               customMapStyle={lightMapStyle}
               scrollEnabled={false}
               zoomEnabled={false}
               pitchEnabled={false}
               rotateEnabled={false}
-            />
+            >
+              {drivers.map((d) => (
+                <Marker
+                  key={d.driver_id}
+                  coordinate={{ latitude: d.latitude, longitude: d.longitude }}
+                  title={d.driver?.full_name ?? 'Driver'}
+                  description={[d.driver?.status, d.driver?.vehicle_type].filter(Boolean).join(' · ')}
+                >
+                  <View style={mapMarker.wrap}>
+                    <Truck size={12} color="#FFFFFF" strokeWidth={2.5} />
+                  </View>
+                </Marker>
+              ))}
+            </MapView>
 
             {/* Status pill */}
             <View style={styles.statusPill} pointerEvents="none">
@@ -433,6 +495,16 @@ const cardStyles = StyleSheet.create({
     alignItems: 'center',
   },
   trackBtnText: { color: '#49C593', fontSize: 13, fontWeight: '700' },
+});
+
+const mapMarker = StyleSheet.create({
+  wrap: {
+    width: 24, height: 24, borderRadius: 12,
+    backgroundColor: '#49C593',
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3, shadowRadius: 3, elevation: 4,
+  },
 });
 
 // ─── Light map style ──────────────────────────────────────────────────────────

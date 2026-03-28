@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Load } from '../lib/supabase';
 import TrackingScreen from '../screens/TrackingScreen';
 import ChatScreen from '../screens/ChatScreen';
+import OrderConfirmedScreen from '../screens/OrderConfirmedScreen';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import AuthScreen from '../screens/AuthScreen';
@@ -31,6 +32,7 @@ export type RootStackParamList = {
   LiveTracking: { load?: Load };
   Tracking: { load: Load };
   Chat: { load_id: string; receiver_id: string };
+  OrderConfirmed: { load: Load };
   DiscountedRoutes: undefined;
   Settings: undefined;
   MyCompany: undefined;
@@ -69,6 +71,7 @@ export default function AppNavigator() {
           <Stack.Screen name="Information"       component={InformationScreen} />
           <Stack.Screen name="Tracking"          component={TrackingScreen} />
           <Stack.Screen name="Chat"              component={ChatScreen} />
+          <Stack.Screen name="OrderConfirmed"   component={OrderConfirmedScreen} />
         </Stack.Navigator>
       </NavigationContainer>
     </SafeAreaProvider>

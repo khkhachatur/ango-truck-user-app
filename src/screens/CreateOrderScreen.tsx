@@ -8,6 +8,7 @@ import {
   Image,
   TextInput,
   StatusBar,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,8 +20,12 @@ import {
   CheckCircle,
   Minus,
   Plus,
+  FileText,
 } from 'lucide-react-native';
 import FolderTabs, { TabKey } from '../components/FolderTabs';
+import { supabase, PriceEstimate } from '../lib/supabase';
+import { useAuth } from '../hooks/useAuth';
+import { formatKwanza } from '../utils/currency';
 
 // ─── Brand ────────────────────────────────────────────────────────────────────
 
@@ -29,7 +34,24 @@ const BRAND          = '#49C593';
 
 // ─── Types & constants ────────────────────────────────────────────────────────
 
-type TruckSize = 'S' | 'M' | 'L' | 'XL';
+// ─── Price estimation ─────────────────────────────────────────────────────────
+
+const PRICE_PER_KM: Record<TruckSize, number> = { S: 150, M: 350, L: 650, XL: 1200 };
+const DEFAULT_DISTANCE_KM = 150;
+
+function parseWeightKg(raw: string): number {
+  const digits = raw.replace(/[^0-9]/g, '');
+  return digits ? parseInt(digits, 10) : 0;
+}
+
+function computeEstimate(size: TruckSize, weightKg: number): PriceEstimate {
+  const base_price      = PRICE_PER_KM[size] * DEFAULT_DISTANCE_KM;
+  const weight_surcharge = Math.max(0, weightKg - 500) * 15;
+  const total_price     = base_price + weight_surcharge;
+  const commission      = Math.round(total_price * 0.12);
+  const driver_payout   = total_price - commission;
+  return { base_price, weight_surcharge, total_price, commission, driver_payout };
+}
 type PickupType = 'now' | 'scheduled';
 
 const WEIGHT_MAP: Record<TruckSize, string> = {
@@ -58,21 +80,31 @@ type EditField = 'from' | 'to' | 'weight' | null;
 
 export default function CreateOrderScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
 
   const [activeTab,    setActiveTab]    = useState<TabKey>('city');
   const [selectedSize, setSelectedSize] = useState<TruckSize>('M');
-  const [loaderCount,  setLoaderCount]  = useState(0); // 0 = None, 1-8
+  const [loaderCount,  setLoaderCount]  = useState(0);
   const [pickupType,   setPickupType]   = useState<PickupType>('now');
 
   // Editable fields
-  const [fromValue,   setFromValue]   = useState('Luanda, Benfica');
-  const [toValue,     setToValue]     = useState('Benguela');
-  const [weightValue, setWeightValue] = useState('2.200 kg');
-  const [editField,   setEditField]   = useState<EditField>(null);
+  const [fromValue,        setFromValue]        = useState('Luanda, Benfica');
+  const [toValue,          setToValue]          = useState('Benguela');
+  const [weightValue,      setWeightValue]      = useState('2.200 kg');
+  const [cargoDescription, setCargoDescription] = useState('');
+  const [editField,        setEditField]        = useState<EditField>(null);
+
+  // Order placement
+  const [placing,    setPlacing]    = useState(false);
+  const [placeError, setPlaceError] = useState<string | null>(null);
 
   const fromRef   = useRef<TextInput>(null);
   const toRef     = useRef<TextInput>(null);
   const weightRef = useRef<TextInput>(null);
+
+  const weightKg = parseWeightKg(weightValue);
+  const estimate = computeEstimate(selectedSize, weightKg);
+  const isReady  = fromValue.trim() && toValue.trim() && cargoDescription.trim();
 
   const handleEdit = (field: EditField) => {
     setEditField(field);
@@ -82,6 +114,40 @@ export default function CreateOrderScreen({ navigation }: Props) {
       if (field === 'weight') weightRef.current?.focus();
     }, 50);
   };
+
+  async function placeOrder() {
+    if (!user || !isReady) return;
+    setPlacing(true);
+    setPlaceError(null);
+
+    const { data, error } = await supabase
+      .from('loads')
+      .insert({
+        shipper_id:          user.id,
+        pickup_location:     fromValue.trim(),
+        dropoff_location:    toValue.trim(),
+        cargo_description:   cargoDescription.trim(),
+        cargo_type:          selectedSize,
+        weight_kg:           weightKg,
+        offered_price_aoa:   estimate.total_price,
+        estimated_price_aoa: estimate.total_price,
+        distance_km:         DEFAULT_DISTANCE_KM,
+        scheduled_date:      pickupType === 'scheduled' ? new Date().toISOString().slice(0, 10) : null,
+        shipper_notes:       '',
+        status:              'open',
+        is_empty_leg:        false,
+      })
+      .select()
+      .single();
+
+    setPlacing(false);
+
+    if (error) {
+      setPlaceError(error.message);
+    } else {
+      navigation?.navigate('OrderConfirmed', { load: data });
+    }
+  }
 
   return (
     <View style={styles.root}>
@@ -256,7 +322,7 @@ export default function CreateOrderScreen({ navigation }: Props) {
             </View>
 
             {/* Weight */}
-            <View style={rowStyles.row}>
+            <View style={[rowStyles.row, rowStyles.border]}>
               <View style={rowStyles.iconWrap}>
                 <ShoppingBag size={18} color="#AAAAAA" strokeWidth={1.8} />
               </View>
@@ -280,6 +346,25 @@ export default function CreateOrderScreen({ navigation }: Props) {
               <TouchableOpacity style={rowStyles.editBtn} onPress={() => handleEdit('weight')}>
                 <Text style={rowStyles.editText}>{editField === 'weight' ? 'Done' : 'Edit'}</Text>
               </TouchableOpacity>
+            </View>
+
+            {/* Cargo description */}
+            <View style={rowStyles.row}>
+              <View style={rowStyles.iconWrap}>
+                <FileText size={18} color="#AAAAAA" strokeWidth={1.8} />
+              </View>
+              <View style={rowStyles.textWrap}>
+                <Text style={rowStyles.label}>Cargo description</Text>
+                <TextInput
+                  style={[rowStyles.input, { borderBottomColor: cargoDescription ? BRAND : '#444' }]}
+                  value={cargoDescription}
+                  onChangeText={setCargoDescription}
+                  placeholder="e.g. Electronics, furniture…"
+                  placeholderTextColor="#555"
+                  returnKeyType="done"
+                  maxLength={120}
+                />
+              </View>
             </View>
           </View>
 
@@ -308,9 +393,46 @@ export default function CreateOrderScreen({ navigation }: Props) {
           />
         </View>
 
-        {/* Order button */}
-        <TouchableOpacity style={styles.orderBtn} activeOpacity={0.85}>
-          <Text style={styles.orderBtnText}>Order</Text>
+        {/* Price estimate card */}
+        {isReady && (
+          <View style={styles.estimateCard}>
+            <Text style={styles.estimateTitle}>Price Estimate</Text>
+            <View style={styles.estimateRow}>
+              <Text style={styles.estimateLabel}>Base price ({selectedSize} · {DEFAULT_DISTANCE_KM} km)</Text>
+              <Text style={styles.estimateValue}>{formatKwanza(estimate.base_price)}</Text>
+            </View>
+            {estimate.weight_surcharge > 0 && (
+              <View style={styles.estimateRow}>
+                <Text style={styles.estimateLabel}>Weight surcharge</Text>
+                <Text style={styles.estimateValue}>{formatKwanza(estimate.weight_surcharge)}</Text>
+              </View>
+            )}
+            <View style={styles.estimateDivider} />
+            <View style={styles.estimateRow}>
+              <Text style={styles.estimateTotalLabel}>Total</Text>
+              <Text style={styles.estimateTotalValue}>{formatKwanza(estimate.total_price)}</Text>
+            </View>
+          </View>
+        )}
+
+        {/* Error */}
+        {placeError && (
+          <Text style={styles.placeError}>{placeError}</Text>
+        )}
+
+        {/* Place Order button */}
+        <TouchableOpacity
+          style={[styles.orderBtn, isReady ? styles.orderBtnActive : styles.orderBtnDisabled]}
+          activeOpacity={isReady ? 0.85 : 1}
+          onPress={placeOrder}
+          disabled={!isReady || placing}
+        >
+          {placing
+            ? <ActivityIndicator color="#FFFFFF" />
+            : <Text style={[styles.orderBtnText, isReady && styles.orderBtnTextActive]}>
+                {isReady ? 'Place Order' : 'Fill all fields to continue'}
+              </Text>
+          }
         </TouchableOpacity>
       </ScrollView>
     </View>
@@ -425,13 +547,35 @@ const styles = StyleSheet.create({
 
   pickupDivider: { height: 1, backgroundColor: '#2A2A2A', marginVertical: 2 },
 
+  // Price estimate card
+  estimateCard: {
+    backgroundColor: '#1E1E1E',
+    borderRadius: 16,
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+  },
+  estimateTitle: { color: '#FFFFFF', fontSize: 15, fontWeight: '700', marginBottom: 12 },
+  estimateRow:   { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  estimateLabel: { color: '#888', fontSize: 13 },
+  estimateValue: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
+  estimateDivider: { height: 1, backgroundColor: '#2A2A2A', marginVertical: 10 },
+  estimateTotalLabel: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
+  estimateTotalValue: { color: '#49C593', fontSize: 17, fontWeight: '800' },
+
+  placeError: { color: '#EF5350', fontSize: 13, textAlign: 'center', marginTop: 8, marginHorizontal: 16 },
+
   // Order button
   orderBtn: {
-    backgroundColor: '#E0E0E0', borderRadius: 16,
-    paddingVertical: 18, alignItems: 'center',
+    borderRadius: 16, paddingVertical: 18, alignItems: 'center',
     marginHorizontal: 16, marginTop: 16,
   },
-  orderBtnText: { color: '#333333', fontSize: 16, fontWeight: 'bold' },
+  orderBtnActive:   { backgroundColor: '#49C593' },
+  orderBtnDisabled: { backgroundColor: '#2A2A2A' },
+  orderBtnText:     { color: '#888', fontSize: 16, fontWeight: 'bold' },
+  orderBtnTextActive: { color: '#FFFFFF' },
 });
 
 const rowStyles = StyleSheet.create({

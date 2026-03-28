@@ -15,6 +15,9 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.angotrack.shipper",
+      "config": {
+        "googleMapsApiKey": "AIzaSyAjP53PmBT5XcqzyZ3ew2_8LwKwV2TnvT4"
+      },
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "AngoTrack needs your location to show nearby drivers.",
         "NSCameraUsageDescription": "AngoTrack needs camera access for proof of delivery photos."
@@ -28,6 +31,11 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "package": "com.angotrack.shipper",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyAjP53PmBT5XcqzyZ3ew2_8LwKwV2TnvT4"
+        }
+      },
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "CAMERA"
