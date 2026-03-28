@@ -9,7 +9,9 @@ import {
   TextInput,
   StatusBar,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -52,7 +54,6 @@ function computeEstimate(size: TruckSize, weightKg: number): PriceEstimate {
   const driver_payout   = total_price - commission;
   return { base_price, weight_surcharge, total_price, commission, driver_payout };
 }
-type PickupType = 'now' | 'scheduled';
 
 const WEIGHT_MAP: Record<TruckSize, string> = {
   S:  '1.000kg',
@@ -84,8 +85,10 @@ export default function CreateOrderScreen({ navigation }: Props) {
 
   const [activeTab,    setActiveTab]    = useState<TabKey>('city');
   const [selectedSize, setSelectedSize] = useState<TruckSize>('M');
-  const [loaderCount,  setLoaderCount]  = useState(0);
-  const [pickupType,   setPickupType]   = useState<PickupType>('now');
+  const [loaderCount,    setLoaderCount]    = useState(0);
+  const [deliveryMode,   setDeliveryMode]   = useState<'asap' | 'scheduled'>('asap');
+  const [scheduledDate,  setScheduledDate]  = useState<Date | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
 
   // Editable fields
   const [fromValue,        setFromValue]        = useState('Luanda, Benfica');
@@ -115,6 +118,11 @@ export default function CreateOrderScreen({ navigation }: Props) {
     }, 50);
   };
 
+  const onDateChange = (event: any, selected?: Date) => {
+    if (Platform.OS === 'android') setShowDatePicker(false);
+    if (selected) setScheduledDate(selected);
+  };
+
   async function placeOrder() {
     if (!user || !isReady) return;
     setPlacing(true);
@@ -132,7 +140,9 @@ export default function CreateOrderScreen({ navigation }: Props) {
         offered_price_aoa:   estimate.total_price,
         estimated_price_aoa: estimate.total_price,
         distance_km:         DEFAULT_DISTANCE_KM,
-        scheduled_date:      pickupType === 'scheduled' ? new Date().toISOString().slice(0, 10) : null,
+        scheduled_date:      deliveryMode === 'scheduled' && scheduledDate
+          ? scheduledDate.toISOString().split('T')[0]
+          : null,
         shipper_notes:       '',
         status:              'open',
         is_empty_leg:        false,
@@ -380,17 +390,50 @@ export default function CreateOrderScreen({ navigation }: Props) {
           <Text style={styles.sectionTitle}>Pickup</Text>
 
           <PickupRow
-            label="In 5-15 mins"
-            active={pickupType === 'now'}
-            onPress={() => setPickupType('now')}
+            label="ASAP (15 min)"
+            active={deliveryMode === 'asap'}
+            onPress={() => {
+              setDeliveryMode('asap');
+              setScheduledDate(null);
+              setShowDatePicker(false);
+            }}
           />
           <View style={styles.pickupDivider} />
           <PickupRow
-            label="Choose the date"
-            active={pickupType === 'scheduled'}
-            onPress={() => setPickupType('scheduled')}
+            label="Choose Date"
+            active={deliveryMode === 'scheduled'}
+            onPress={() => {
+              setDeliveryMode('scheduled');
+              setShowDatePicker(true);
+            }}
             dimmed
           />
+
+          {/* Date picker */}
+          {deliveryMode === 'scheduled' && showDatePicker && (
+            <DateTimePicker
+              value={scheduledDate ?? new Date()}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'inline' : 'default'}
+              minimumDate={new Date()}
+              onChange={onDateChange}
+              themeVariant="dark"
+              accentColor="#49C593"
+            />
+          )}
+
+          {/* Selected date label */}
+          {deliveryMode === 'scheduled' && scheduledDate && (
+            <Text style={styles.selectedDate}>
+              {'📅 '}
+              {scheduledDate.toLocaleDateString('pt-AO', {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+              })}
+            </Text>
+          )}
         </View>
 
         {/* Price estimate card */}
@@ -546,6 +589,14 @@ const styles = StyleSheet.create({
   infoBadgeText: { color: '#666', fontSize: 11, fontWeight: '700' },
 
   pickupDivider: { height: 1, backgroundColor: '#2A2A2A', marginVertical: 2 },
+  selectedDate: {
+    color: '#49C593',
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 10,
+    marginBottom: 4,
+    paddingHorizontal: 4,
+  },
 
   // Price estimate card
   estimateCard: {
