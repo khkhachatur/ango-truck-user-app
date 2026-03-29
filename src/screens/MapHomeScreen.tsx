@@ -17,7 +17,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Menu, Plus, ChevronDown, ChevronRight, Truck } from 'lucide-react-native';
 import MenuOverlay from '../components/MenuOverlay';
-import { supabase } from '../lib/supabase';
+import { supabase, Load } from '../lib/supabase';
+import { useAuth } from '../hooks/useAuth';
+import { formatKwanza } from '../utils/currency';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const HEADER_HEIGHT = 260;
@@ -46,35 +48,52 @@ interface Props {
   navigation?: any;
 }
 
-// ─── Route data ───────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-interface Route {
-  id: string;
-  fromCity: string;
-  toCity: string;
-  fromDate: string;
-  toDate: string;
-  progress: number;
-  truckSize: string;
-  weight: string;
-  price: string;
-  status: string;
+const STATUS_PROGRESS: Record<string, number> = {
+  open: 0.1, assigned: 0.35, in_transit: 0.7, delivered: 1.0, cancelled: 0,
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  open: 'Open — Awaiting Driver',
+  assigned: 'Assigned — Driver En Route',
+  in_transit: 'In Transit — On Route',
+  delivered: 'Delivered',
+  cancelled: 'Cancelled',
+};
+
+const SIZE_LABEL: Record<string, string> = {
+  S: 'S - Pickup', M: 'M - Box Truck', L: 'L - Rigid Truck', XL: 'XL - Semi-Trailer',
+};
+
+function fmtDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' });
 }
-
-const ROUTES: Route[] = [
-  { id: '1', fromCity: 'Luanda',   toCity: 'Benguela',  fromDate: 'Jun 11', toDate: 'Jun 12', progress: 0.95, truckSize: 'L - Rigid Truck', weight: '6,500 kg', price: 'Kz 9.750 mil',  status: 'In Transit - Driver Assigned' },
-  { id: '2', fromCity: 'Benguela', toCity: 'Luanda',    fromDate: 'Jun 10', toDate: 'Jun 11', progress: 0.80, truckSize: 'M - Box Truck',   weight: '2,200 kg', price: 'Kz 5.250 mil',  status: 'In Transit - On Route' },
-  { id: '3', fromCity: 'Angola',   toCity: 'Namibia',   fromDate: 'Jun 5',  toDate: 'Jun 13', progress: 0.55, truckSize: 'XL - Semi-Trailer', weight: '18,000 kg', price: 'Kz 18.000 mil', status: 'In Transit - Customs Clearance' },
-  { id: '4', fromCity: 'Luanda',   toCity: 'Cabu Ledo', fromDate: 'Jun 11', toDate: 'Jun 11', progress: 0.90, truckSize: 'S - Pickup',       weight: '800 kg',   price: 'Kz 2.250 mil',  status: 'Delivered' },
-];
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function MapHomeScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [hasActiveOrder, setHasActiveOrder] = useState(false);
   const [drivers, setDrivers] = useState<DriverMarker[]>([]);
+  const [recentLoads, setRecentLoads] = useState<Load[]>([]);
+
+  // Fetch recent loads for this shipper
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from('loads')
+      .select('*')
+      .eq('shipper_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(4)
+      .then(({ data }) => { if (data) setRecentLoads(data as Load[]); });
+  }, [user]);
+
+  const hasActiveOrder = recentLoads.some(
+    (l) => l.status === 'assigned' || l.status === 'in_transit',
+  );
 
   // Fetch active driver locations
   useEffect(() => {
@@ -239,9 +258,25 @@ export default function MapHomeScreen({ navigation }: Props) {
         </View>
 
         <View style={styles.routeList}>
-          {ROUTES.map((r) => (
-            <RouteCard key={r.id} {...r} />
-          ))}
+          {recentLoads.length === 0 ? (
+            <Text style={styles.emptyLoads}>No shipments yet</Text>
+          ) : (
+            recentLoads.map((l) => (
+              <RouteCard
+                key={l.id}
+                fromCity={l.pickup_location}
+                toCity={l.dropoff_location}
+                fromDate={fmtDate(l.created_at)}
+                toDate={l.scheduled_date ? fmtDate(l.scheduled_date) : '—'}
+                progress={STATUS_PROGRESS[l.status] ?? 0}
+                truckSize={SIZE_LABEL[l.cargo_type] ?? l.cargo_type}
+                weight={`${l.weight_kg.toLocaleString()} kg`}
+                price={formatKwanza(l.offered_price_aoa ?? 0)}
+                status={STATUS_LABEL[l.status] ?? l.status}
+                onTrack={() => navigation?.navigate('Tracking', { load: l })}
+              />
+            ))
+          )}
         </View>
       </ScrollView>
 
@@ -267,9 +302,10 @@ interface RouteCardProps {
   weight: string;
   price: string;
   status: string;
+  onTrack?: () => void;
 }
 
-function RouteCard({ fromCity, toCity, fromDate, toDate, progress, truckSize, weight, price, status }: RouteCardProps) {
+function RouteCard({ fromCity, toCity, fromDate, toDate, progress, truckSize, weight, price, status, onTrack }: RouteCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const anim = useRef(new Animated.Value(0)).current;
 
@@ -325,7 +361,7 @@ function RouteCard({ fromCity, toCity, fromDate, toDate, progress, truckSize, we
               <Text style={cardStyles.detailValue} numberOfLines={1}>{status}</Text>
             </View>
           </View>
-          <TouchableOpacity style={cardStyles.trackBtn} activeOpacity={0.7}>
+          <TouchableOpacity style={cardStyles.trackBtn} activeOpacity={0.7} onPress={onTrack}>
             <Text style={cardStyles.trackBtnText}>Track Shipment</Text>
           </TouchableOpacity>
         </View>
@@ -452,6 +488,7 @@ const styles = StyleSheet.create({
   recentTitle: { color: '#FFFFFF', fontSize: 17, fontWeight: '700' },
   viewAll:     { color: '#49C593', fontSize: 14, fontWeight: '600' },
   routeList:   { paddingHorizontal: 16, gap: 2 },
+  emptyLoads:  { color: '#555', textAlign: 'center', marginTop: 20, fontSize: 14 },
 });
 
 const cardStyles = StyleSheet.create({
